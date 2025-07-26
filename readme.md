@@ -27,6 +27,11 @@ Ce plugin a été conçu pour les utilisateurs de WordPress qui intègrent du co
 
 ## Comment utiliser le plugin ?
 
+L'interface est simple et rapide à prendre en main.
+
+<img width="635" height="479" alt="image" src="https://github.com/user-attachments/assets/fbf8a620-c8de-49f6-b804-19c5a212e710" />
+
+
 1.  Une fois le plugin activé, rendez-vous dans le menu `Outils` → `effi AI Corrector`.
 2.  **Étape 1 : Configurer les types de contenu**
     *   Cochez les cases correspondant aux types de contenu que vous souhaitez que le plugin analyse et corrige (par exemple, "Articles", "Pages").

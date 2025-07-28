@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       effi AI Corrector
  * Description:       Nettoie et corrige les anomalies de contenu générées par IA (artefacts de code, formatage Markdown, etc.).
- * Version:           1.0.0
+ * Version:           1.0.2
  * Author:            Cédric GIRARD
  * Author URI:        https://www.effi10.com
  * License:           GPL v2 or later
@@ -23,6 +23,7 @@ class Effi_AI_Corrector {
 
     private static $cron_hook = 'effi_ai_corrector_daily_cron';
     private static $option_name = 'eac_selected_post_types';
+    private static $rules_option_name = 'eac_correction_rules';
 
     /**
      * Constructeur
@@ -65,12 +66,29 @@ class Effi_AI_Corrector {
     public function render_admin_page() {
         // Sauvegarde des types de contenu sélectionnés si le formulaire est soumis
         if ( isset( $_POST['eac_save_settings_nonce'] ) && wp_verify_nonce( $_POST['eac_save_settings_nonce'], 'eac_save_settings' ) ) {
+            // Sauvegarde des types de contenu
             $selected_post_types = isset( $_POST['eac_post_types'] ) ? array_map( 'sanitize_text_field', $_POST['eac_post_types'] ) : [];
             update_option( self::$option_name, $selected_post_types );
-            echo '<div class="notice notice-success is-dismissible"><p><strong>Réglages sauvegardés.</strong></p></div>';
+
+            // Sauvegarde des règles
+            $rules_updated = true;
+            if ( isset( $_POST['eac_rules_json'] ) ) {
+                $rules_json = stripslashes( $_POST['eac_rules_json'] );
+                if ( ! empty( trim( $rules_json ) ) && json_decode( $rules_json ) === null && json_last_error() !== JSON_ERROR_NONE ) {
+                    echo '<div class="notice notice-error is-dismissible"><p><strong>Le format JSON des règles de contenu est invalide. Les règles n\'ont pas été sauvegardées.</strong></p></div>';
+                    $rules_updated = false;
+                } else {
+                    update_option( self::$rules_option_name, $rules_json );
+                }
+            }
+            
+            if ($rules_updated) {
+                echo '<div class="notice notice-success is-dismissible"><p><strong>Réglages sauvegardés.</strong></p></div>';
+            }
         }
 
         $saved_post_types = get_option( self::$option_name, [] );
+        $saved_rules_json = get_option( self::$rules_option_name, $this->get_default_rules_json() );
         ?>
         <div class="wrap">
             <h1><?php _e( 'effi AI Corrector - Outil de Correction', 'effi-ai-corrector' ); ?></h1>
@@ -91,12 +109,19 @@ class Effi_AI_Corrector {
                     echo '</label>';
                 }
                 ?>
-                <p><button type="submit" class="button button-secondary"><?php _e( 'Sauvegarder la sélection', 'effi-ai-corrector' ); ?></button></p>
+
+                <hr style="margin-top: 20px; margin-bottom: 20px;">
+
+                <h2 class="title"><?php _e( '2. Règles de correction du contenu (Format JSON)', 'effi-ai-corrector' ); ?></h2>
+                <p><?php _e( 'Modifiez ici les règles de remplacement. Laissez vide pour ne rien faire. Les règles sont appliquées dans l\'ordre.', 'effi-ai-corrector' ); ?></p>
+                <textarea name="eac_rules_json" rows="15" style="width:100%; font-family: monospace;"><?php echo esc_textarea( $saved_rules_json ); ?></textarea>
+
+                <p><button type="submit" class="button button-primary"><?php _e( 'Sauvegarder les réglages', 'effi-ai-corrector' ); ?></button></p>
             </form>
             
             <hr>
 
-            <h2 class="title"><?php _e( '2. Actions Manuelles', 'effi-ai-corrector' ); ?></h2>
+            <h2 class="title"><?php _e( '3. Actions Manuelles', 'effi-ai-corrector' ); ?></h2>
             <div id="eac-manual-actions">
                 <button id="eac-analyze-btn" class="button button-secondary">
                     <span class="dashicons dashicons-search" style="vertical-align: middle;"></span> <?php _e( 'Analyser les anomalies', 'effi-ai-corrector' ); ?>
@@ -114,7 +139,7 @@ class Effi_AI_Corrector {
             
             <hr>
 
-            <h2 class="title"><?php _e( '3. Action Automatisée (Tâche CRON)', 'effi-ai-corrector' ); ?></h2>
+            <h2 class="title"><?php _e( '4. Action Automatisée (Tâche CRON)', 'effi-ai-corrector' ); ?></h2>
             <div id="eac-cron-action">
                 <?php
                 $cron_active = wp_next_scheduled( self::$cron_hook );
@@ -251,20 +276,21 @@ class Effi_AI_Corrector {
         $corrections = 0;
         $original_content = $content;
 
-        // Règle 1: Suppression de <p>```</p>
-        $content = str_replace('<p>```</p>', '', $content);
+        $rules_json = get_option(self::$rules_option_name, $this->get_default_rules_json());
+        $rules = json_decode($rules_json, true);
 
-        // Règle 2: Suppression de <p>```html</p>
-        $content = str_replace('<p>```html</p>', '', $content);
+        if (is_array($rules)) {
+            foreach ($rules as $rule) {
+                if (!empty($rule['enabled']) && $rule['enabled'] === true) {
+                    if ($rule['type'] === 'str_replace' && isset($rule['search'])) {
+                        $content = str_replace($rule['search'], $rule['replace'] ?? '', $content);
+                    } elseif ($rule['type'] === 'preg_replace' && isset($rule['pattern'])) {
+                        $content = preg_replace($rule['pattern'], $rule['replacement'] ?? '', $content);
+                    }
+                }
+            }
+        }
         
-        // Règle 3: Correction de **mot** en <strong>mot</strong>
-        $pattern = '/\*\*(?!\s)(.*?)(?!\s)\*\*/u';
-        $content = preg_replace($pattern, '<strong>$1</strong>', $content);
-        
-		// Règle 3: Correction de *mot* en <em>mot</em>
-        $pattern = '/\*(?!\s)(.*?)(?!\s)\*/u';
-        $content = preg_replace($pattern, '<em>$1</em>', $content);
-		
         if($original_content !== $content) {
             $corrections = 1; // Au moins une correction a été faite
         }
@@ -272,6 +298,57 @@ class Effi_AI_Corrector {
         return ['content' => $content, 'corrected' => $corrections];
     }
     
+    /**
+     * Fonction de correction pour le titre
+     */
+    private function perform_title_correction($title) {
+        // Remplacement des espaces insécables (UTF-8 \xc2\xa0 et entité &nbsp;) par un espace standard avant le trim.
+        $title_with_standard_spaces = str_replace(["\xc2\xa0", '&nbsp;'], ' ', $title);
+        $trimmed_title = trim($title_with_standard_spaces);
+        return ['title' => $trimmed_title, 'corrected' => $title !== $trimmed_title];
+    }
+
+    /**
+     * Fournit les règles JSON par défaut
+     */
+    private function get_default_rules_json() {
+        $rules = [
+            [
+                'id' => 'remove_code_block_1',
+                'label' => 'Suppression de <p>```</p>',
+                'type' => 'str_replace',
+                'enabled' => true,
+                'search' => '<p>```</p>',
+                'replace' => ''
+            ],
+            [
+                'id' => 'remove_code_block_html',
+                'label' => 'Suppression de <p>```html</p>',
+                'type' => 'str_replace',
+                'enabled' => true,
+                'search' => '<p>```html</p>',
+                'replace' => ''
+            ],
+            [
+                'id' => 'bold_markdown_to_strong',
+                'label' => 'Conversion de **texte** en <strong>',
+                'type' => 'preg_replace',
+                'enabled' => true,
+                'pattern' => '/\*\*(?!\s)(.*?)(?!\s)\*\*/u',
+                'replacement' => '<strong>$1</strong>'
+            ],
+            [
+                'id' => 'italic_markdown_to_em',
+                'label' => "Conversion de *texte* en <em>",
+                'type' => 'preg_replace',
+                'enabled' => true,
+                'pattern' => '/\*(?!\s)(.*?)(?!\s)\*/u',
+                'replacement' => '<em>$1</em>'
+            ]
+        ];
+        return json_encode($rules, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
     /**
      * Gère la requête AJAX pour l'analyse
      */
@@ -287,9 +364,14 @@ class Effi_AI_Corrector {
         if ($query->have_posts()) {
             while ($query->have_posts()) {
                 $query->the_post();
+                global $post;
                 $post_content = get_the_content();
-                $result = $this->perform_correction($post_content);
-                if ($result['corrected']) {
+                $post_title = $post->post_title;
+                
+                $content_result = $this->perform_correction($post_content);
+                $title_result = $this->perform_title_correction($post_title);
+
+                if ($content_result['corrected'] || $title_result['corrected']) {
                     $affected_posts++;
                 }
             }
@@ -316,19 +398,32 @@ class Effi_AI_Corrector {
         if ($query->have_posts()) {
             while ($query->have_posts()) {
                 $query->the_post();
+                global $post;
                 $post_id = get_the_ID();
                 $post_content = get_the_content();
+                $post_title = $post->post_title;
                 
-                $result = $this->perform_correction($post_content);
+                $content_result = $this->perform_correction($post_content);
+                $title_result = $this->perform_title_correction($post_title);
                 
-                if ($result['corrected']) {
+                $is_corrected = false;
+                $post_update_data = ['ID' => $post_id];
+                
+                if ($content_result['corrected']) {
+                    $post_update_data['post_content'] = $content_result['content'];
+                    $is_corrected = true;
+                }
+                
+                if ($title_result['corrected']) {
+                    $post_update_data['post_title'] = $title_result['title'];
+                    $is_corrected = true;
+                }
+                
+                if ($is_corrected) {
                     // Supprimer les hooks qui pourraient interférer pour éviter les boucles infinies
                     remove_action( 'save_post', 'wp_save_post_revision' );
                     
-                    wp_update_post( [
-                        'ID'           => $post_id,
-                        'post_content' => $result['content'],
-                    ] );
+                    wp_update_post( $post_update_data );
                     
                     // Rétablir le hook
                     add_action( 'save_post', 'wp_save_post_revision' );
@@ -384,17 +479,30 @@ class Effi_AI_Corrector {
         if ($query->have_posts()) {
             while ($query->have_posts()) {
                 $query->the_post();
+                global $post;
                 $post_id = get_the_ID();
                 $post_content = get_the_content();
-                
-                $result = $this->perform_correction($post_content);
-                
-                if ($result['corrected']) {
+                $post_title = $post->post_title;
+
+                $content_result = $this->perform_correction($post_content);
+                $title_result = $this->perform_title_correction($post_title);
+
+                $is_corrected = false;
+                $post_update_data = ['ID' => $post_id];
+
+                if ($content_result['corrected']) {
+                    $post_update_data['post_content'] = $content_result['content'];
+                    $is_corrected = true;
+                }
+
+                if ($title_result['corrected']) {
+                    $post_update_data['post_title'] = $title_result['title'];
+                    $is_corrected = true;
+                }
+
+                if ($is_corrected) {
                     remove_action( 'save_post', 'wp_save_post_revision' );
-                    wp_update_post( [
-                        'ID'           => $post_id,
-                        'post_content' => $result['content'],
-                    ] );
+                    wp_update_post( $post_update_data );
                     add_action( 'save_post', 'wp_save_post_revision' );
                 }
             }

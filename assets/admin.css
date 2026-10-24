@@ -1,0 +1,100 @@
+/* effi AI Corrector : page Outils > effi AI Corrector. */
+
+.eac-wrap .eac-warning {
+	border-left-width: 6px;
+	margin: 16px 0;
+}
+
+.eac-wrap .eac-warning ul,
+.eac-wrap .eac-error-list {
+	list-style: disc;
+	margin-left: 20px;
+}
+
+.eac-types label {
+	display: inline-block;
+	margin: 0 20px 8px 0;
+}
+
+.eac-progress {
+	margin: 12px 0;
+	max-width: 640px;
+}
+
+.eac-progress-track {
+	background: #dcdcde;
+	border-radius: 3px;
+	height: 12px;
+	overflow: hidden;
+}
+
+.eac-progress-bar {
+	background: #2271b1;
+	height: 100%;
+	transition: width 0.2s ease;
+	width: 0;
+}
+
+.eac-progress-label {
+	margin: 6px 0 0;
+}
+
+.eac-results-table {
+	margin-top: 12px;
+}
+
+.eac-results-table .eac-id {
+	color: #646970;
+}
+
+.eac-results-table .eac-changes {
+	margin: 0;
+}
+
+.eac-results-table .eac-col-type {
+	width: 10%;
+}
+
+.eac-results-table .eac-col-changes {
+	width: 28%;
+}
+
+.eac-results-table .eac-col-status {
+	width: 16%;
+}
+
+.eac-preview {
+	margin-top: 8px;
+}
+
+.eac-preview summary {
+	cursor: pointer;
+	color: #2271b1;
+}
+
+.eac-diff {
+	max-height: 420px;
+	overflow: auto;
+	margin-top: 8px;
+}
+
+.eac-diff table.diff td {
+	word-break: break-word;
+}
+
+#eac-errors ul {
+	list-style: disc;
+	margin-left: 20px;
+}
+
+.eac-log-table .eac-log-errors {
+	margin: 0;
+}
+
+@media screen and (max-width: 782px) {
+	.eac-results-table .eac-col-type,
+	.eac-results-table .eac-col-changes,
+	.eac-results-table .eac-col-status {
+		width: auto;
+	}
+}
